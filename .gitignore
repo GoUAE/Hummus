@@ -23,4 +23,6 @@ result/
 # Go workspace file
 go.work
 
-
+*.db
+.env
+hummus
