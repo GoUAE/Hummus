@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"mime"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -91,13 +92,10 @@ func GetEventHandler(client *whatsmeow.Client) func(interface{}) {
 							profilePic = userProfilePicInfo.URL
 						}
 
+						files := []*discordgo.File{}
+
 						// TODO: check other message types (audio, document, stickers etc.) and handle them properly.
 						imageMessage := v.Message.GetImageMessage()
-						stickerMessage := v.Message.GetStickerMessage()
-						files := []*discordgo.File{}
-						var embeds []*discordgo.MessageEmbed
-
-						var imageEmbed discordgo.MessageEmbedImage
 						if imageMessage != nil {
 
 							mimeType := "image/jpg"
@@ -113,21 +111,82 @@ func GetEventHandler(client *whatsmeow.Client) func(interface{}) {
 							}
 
 							data, _ := client.Download(imageMessage)
-							imageEmbed = discordgo.MessageEmbedImage{
-								URL:    "attachment://image." + extension,
-								Width:  int(v.Message.ImageMessage.GetWidth()),
-								Height: int(v.Message.ImageMessage.GetHeight()),
-							}
 							files = append(files, &discordgo.File{
 								Name:        "image." + extension,
 								ContentType: mimeType,
 								Reader:      bytes.NewBuffer(data),
 							})
-							embeds = append(embeds, &discordgo.MessageEmbed{
-								Type:  discordgo.EmbedTypeImage,
-								Image: &imageEmbed,
+						}
+
+						audioMessage := v.Message.GetAudioMessage()
+						if audioMessage != nil {
+
+							mimeType := "audio/ogg"
+
+							mimeTypeRef := audioMessage.Mimetype
+							if mimeTypeRef != nil {
+								mimeType = *mimeTypeRef
+							}
+
+							extension := "ogg"
+							extensions, _ := mime.ExtensionsByType(mimeType)
+							if len(extensions) > 0 {
+								extension = extensions[0]
+							}
+
+							data, _ := client.Download(audioMessage)
+							files = append(files, &discordgo.File{
+								Name:        "audio." + extension,
+								ContentType: mimeType,
+								Reader:      bytes.NewBuffer(data),
 							})
 						}
+
+						document := v.Message.GetDocumentMessage()
+						if document != nil {
+
+							mimeType := "text/unknown"
+
+							mimeTypeRef := document.Mimetype
+							if mimeTypeRef != nil {
+								mimeType = *mimeTypeRef
+							}
+
+							extension := "unknown"
+							extensions, _ := mime.ExtensionsByType(mimeType)
+							if len(extensions) > 0 {
+								extension = extensions[0]
+							}
+
+							data, _ := client.Download(document)
+							files = append(files, &discordgo.File{
+								Name:        "document." + extension,
+								ContentType: mimeType,
+								Reader:      bytes.NewBuffer(data),
+							})
+						}
+
+						videoMessage := v.Message.GetVideoMessage()
+						if videoMessage != nil {
+
+							mimeType := "video/mp4"
+
+							mimeTypeRef := videoMessage.Mimetype
+							if mimeTypeRef != nil {
+								mimeType = *mimeTypeRef
+							}
+
+							extension := "mp4"
+
+							data, _ := client.Download(videoMessage)
+							files = append(files, &discordgo.File{
+								Name:        "videoMessage." + extension,
+								ContentType: mimeType,
+								Reader:      bytes.NewBuffer(data),
+							})
+						}
+
+						stickerMessage := v.Message.GetStickerMessage()
 
 						if stickerMessage != nil {
 							mimeType := "image/png"
@@ -137,9 +196,10 @@ func GetEventHandler(client *whatsmeow.Client) func(interface{}) {
 								mimeType = *mimeTypeRef
 							}
 
-							extension, hasExtension := strings.CutPrefix(mimeType, "image/")
-							if !hasExtension {
-								extension = "png"
+							extension := "png"
+							extensions, _ := mime.ExtensionsByType(mimeType)
+							if len(extensions) > 0 {
+								extension = extensions[0]
 							}
 
 							data, _ := client.Download(stickerMessage)
@@ -160,19 +220,10 @@ func GetEventHandler(client *whatsmeow.Client) func(interface{}) {
 								}
 							}
 
-							imageEmbed = discordgo.MessageEmbedImage{
-								URL:    "attachment://image." + extension,
-								Width:  int(v.Message.ImageMessage.GetWidth()),
-								Height: int(v.Message.ImageMessage.GetHeight()),
-							}
 							files = append(files, &discordgo.File{
 								Name:        "image." + extension,
 								ContentType: mimeType,
 								Reader:      reader,
-							})
-							embeds = append(embeds, &discordgo.MessageEmbed{
-								Type:  discordgo.EmbedTypeImage,
-								Image: &imageEmbed,
 							})
 						}
 
@@ -251,7 +302,7 @@ func GetEventHandler(client *whatsmeow.Client) func(interface{}) {
 						// (until we figure out how to get the JID and eventually name for each mention)
 						redactedText := regex.ReplaceAllString(messageContent, "`@[REDACTED]`")
 
-						if redactedText == "" && embeds == nil {
+						if redactedText == "" && files == nil {
 							return
 						}
 						_, err = config.DG.WebhookExecute(
@@ -262,7 +313,6 @@ func GetEventHandler(client *whatsmeow.Client) func(interface{}) {
 								Content:   redactedText,
 								Username:  v.Info.PushName,
 								AvatarURL: profilePic,
-								Embeds:    embeds,
 								Files:     files,
 							},
 						)
