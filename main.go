@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -54,6 +55,14 @@ func main() {
 
 	<-stop // Wait for a termination signal
 
+	log.Println("\nShutting down the bot...")
+
 	waBot.Stop()
-	discordBot.Stop()
+	err = discordBot.Stop()
+	if err != nil {
+		utils.LogError(discordBot.Stop(), "Error stopping discord bot")
+		return
+	}
+
+	log.Println("Bot stopped gracefully.")
 }
