@@ -17,6 +17,12 @@ import (
 	"go.mau.fi/whatsmeow/types"
 )
 
+func LogError(err error, desc ...string) {
+	if err != nil {
+		log.Println(desc, err.Error())
+	}
+}
+
 func ConvertWebpToX(inputBuffer *bytes.Buffer, outformat string) (*bytes.Buffer, error) {
 	// Create temporary files for input and output
 	inputFile, err := os.CreateTemp("", "input-*.webp")

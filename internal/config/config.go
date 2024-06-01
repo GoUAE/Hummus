@@ -1,24 +1,21 @@
 package config
 
 import (
-	"github.com/bwmarrin/discordgo"
 	"github.com/caarlos0/env/v11"
 )
 
-type hummusConfig struct {
+type HummusConfig struct {
 	DiscordBotToken     string `env:"DISCORD_BOT_TOKEN"`
 	WhatsappGoUAEJID    string `env:"WA_GOUAE_JID"`
 	DiscordWebhookID    string `env:"DISCORD_WEBHOOK_ID"`
 	DiscordWebhoolToken string `env:"DISCORD_WEBHOOK_TOKEN"`
+	FallbackAvatarURL   string `env:"DISCORD_FALLBACK_AVATAR_URL"`
 	// DiscordChannelID    string `env:"DISCORD_CHANNEL_ID"`
 }
 
-// shared session
-var (
-	HummusConfig hummusConfig
-	DG           *discordgo.Session
-)
+func LoadFromEnv() (HummusConfig, error) {
+	var hummusConfig HummusConfig
+	err := env.Parse(&hummusConfig)
 
-func LoadEnvIntoConfig() error {
-	return env.Parse(&HummusConfig)
+	return hummusConfig, err
 }

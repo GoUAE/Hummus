@@ -4,8 +4,6 @@ import (
 	"context"
 	"log"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/gouae/hummus/internal/config"
 	"github.com/gouae/hummus/internal/discord"
@@ -18,46 +16,61 @@ import (
 	waLog "go.mau.fi/whatsmeow/util/log"
 )
 
-func GetEventHandler(client *whatsmeow.Client) func(interface{}) {
+type Bot struct {
+	session          *whatsmeow.Client
+	whatsappGoUAEJID string
+	discordBridge    discord.Bot
+}
+
+func (bot *Bot) GetEventHandler() func(interface{}) {
 	return func(event interface{}) {
 		switch v := event.(type) {
 		case *events.Message:
 			if v != nil {
 				jid := v.Info.Chat
 
-				if jid.String() == config.HummusConfig.WhatsappGoUAEJID {
-					go discord.PipeToDiscord(jid, client, v)
+				if jid.String() == bot.whatsappGoUAEJID {
+					go bot.discordBridge.PipeToDiscord(jid, bot.session, v)
 				}
 			}
 		}
 	}
 }
 
-func RunWhatsappBot() {
-	// TODO: replace panics with proper error handling
+func New(cfg config.HummusConfig, bridge discord.Bot) (waBot Bot, err error) {
+	// creates a new bot instance
+	waBot = Bot{
+		whatsappGoUAEJID: cfg.WhatsappGoUAEJID,
+		discordBridge:    bridge,
+	}
+
 	dbLog := waLog.Stdout("Database", "DEBUG", true)
 	// Make sure you add appropriate DB connector imports, e.g. github.com/mattn/go-sqlite3 for SQLite as we did in this minimal working example
 	container, err := sqlstore.New("sqlite3", "file:hummus.db?_foreign_keys=on", dbLog)
 	if err != nil {
-		panic(err)
+		return
 	}
 
 	// If you want multiple sessions, remember their JIDs and use .GetDevice(jid) or .GetAllDevices() instead.
 	deviceStore, err := container.GetFirstDevice()
 	if err != nil {
-		panic(err)
+		return
 	}
 
 	clientLog := waLog.Stdout("Client", "INFO", true)
-	client := whatsmeow.NewClient(deviceStore, clientLog)
-	client.AddEventHandler(GetEventHandler(client))
+	waBot.session = whatsmeow.NewClient(deviceStore, clientLog)
+	waBot.session.AddEventHandler(waBot.GetEventHandler())
 
-	if client.Store.ID == nil {
+	return
+}
+
+func (waBot *Bot) Run() (err error) {
+	if waBot.session.Store.ID == nil {
 		// No ID stored, new login
-		qrChan, _ := client.GetQRChannel(context.Background())
-		err = client.Connect()
+		qrChan, _ := waBot.session.GetQRChannel(context.Background())
+		err = waBot.session.Connect()
 		if err != nil {
-			panic(err)
+			return
 		}
 		for evt := range qrChan {
 			if evt.Event == "code" {
@@ -71,16 +84,14 @@ func RunWhatsappBot() {
 		}
 	} else {
 		// Already logged in, just connect
-		err = client.Connect()
+		err = waBot.session.Connect()
 		if err != nil {
-			panic(err)
+			return
 		}
 	}
+	return
+}
 
-	// Listen to Ctrl+C (you can also do something else that prevents the program from exiting)
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	<-c
-
-	client.Disconnect()
+func (waBot *Bot) Stop() {
+	waBot.session.Disconnect()
 }

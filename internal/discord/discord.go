@@ -13,9 +13,52 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 )
 
-func PipeToDiscord(jid types.JID, client *whatsmeow.Client, v *events.Message) {
+type Bot struct {
+	session           *discordgo.Session
+	discordBotToken   string
+	webhookID         string
+	webhookToken      string
+	fallbackAvatarURL string
+}
+
+func New(cfg config.HummusConfig) (discordBot Bot, err error) {
+	discordBot = Bot{
+		discordBotToken:   cfg.DiscordBotToken,
+		webhookID:         cfg.DiscordWebhookID,
+		webhookToken:      cfg.DiscordWebhoolToken,
+		fallbackAvatarURL: cfg.FallbackAvatarURL,
+	}
+
+	discordBot.session, err = discordgo.New("Bot " + discordBot.discordBotToken)
+	if err != nil {
+		return
+	}
+
+	// sets correct itents for the current session
+	discordBot.session.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsMessageContent
+
+	return
+}
+
+func (bot *Bot) Run() (err error) {
+	err = bot.session.Open()
+	if err != nil {
+		return err
+	}
+	return
+}
+
+func (bot *Bot) Stop() (err error) {
+	err = bot.session.Close()
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (bot *Bot) PipeToDiscord(jid types.JID, client *whatsmeow.Client, v *events.Message) {
 	// fallback profile picture
-	profilePic := "https://wearedesigners.golang.ae/dist/img/gouae-mascot.png"
+	profilePic := bot.fallbackAvatarURL
 
 	userProfilePicInfo, err := client.
 		GetProfilePictureInfo(
@@ -31,8 +74,6 @@ func PipeToDiscord(jid types.JID, client *whatsmeow.Client, v *events.Message) {
 	}
 
 	files := utils.WhatsappFilesToDiscordFiles(client, v.Message)
-
-	// TODO: check other message types (audio, document, stickers etc.) and handle them properly.
 
 	var newMessageContent string
 	var quotedMessageContent string
@@ -82,9 +123,9 @@ func PipeToDiscord(jid types.JID, client *whatsmeow.Client, v *events.Message) {
 	if redactedText == "" && files == nil {
 		return
 	}
-	_, err = config.DG.WebhookExecute(
-		config.HummusConfig.DiscordWebhookID,
-		config.HummusConfig.DiscordWebhoolToken,
+	_, err = bot.session.WebhookExecute(
+		bot.webhookID,
+		bot.webhookToken,
 		true,
 		&discordgo.WebhookParams{
 			Content:   redactedText,
@@ -94,6 +135,6 @@ func PipeToDiscord(jid types.JID, client *whatsmeow.Client, v *events.Message) {
 		},
 	)
 	if err != nil {
-		log.Println(err.Error())
+		utils.LogError(err, "Failed to execute Discord webhook")
 	}
 }
