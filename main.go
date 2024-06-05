@@ -55,7 +55,7 @@ func main() {
 
 	<-stop // Wait for a termination signal
 
-	log.Println("\nShutting down the bot...")
+	log.Println("Shutting down the bot...")
 
 	waBot.Stop()
 	err = discordBot.Stop()

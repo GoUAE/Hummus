@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"sync"
 
 	"github.com/gouae/hummus/internal/config"
 	"github.com/gouae/hummus/internal/discord"
@@ -20,6 +21,7 @@ type Bot struct {
 	session          *whatsmeow.Client
 	whatsappGoUAEJID string
 	discordBridge    discord.Bot
+	messageMutex     sync.Mutex
 }
 
 func (bot *Bot) GetEventHandler() func(interface{}) {
@@ -30,7 +32,12 @@ func (bot *Bot) GetEventHandler() func(interface{}) {
 				jid := v.Info.Chat
 
 				if jid.String() == bot.whatsappGoUAEJID {
-					go bot.discordBridge.PipeToDiscord(jid, bot.session, v)
+					// lock the mutex and wait for the message
+					// to be sent before sending the next one
+					bot.messageMutex.Lock()
+					defer bot.messageMutex.Unlock()
+
+					bot.discordBridge.PipeToDiscord(jid, bot.session, v)
 				}
 			}
 		}
