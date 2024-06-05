@@ -1,5 +1,5 @@
 {
-  description = "GoUAE/golang.ae: The official site of the Go community in the UAE";
+  description = "GoUAE/Hummus: A Whatsapp -> Discord Read-only Bridge for the GoUAE Community";
 
   outputs = inputs @ {flake-parts, ...}:
     flake-parts.lib.mkFlake {inherit inputs;} {
