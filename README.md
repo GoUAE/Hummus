@@ -23,12 +23,7 @@ cp .env.example .env
 
 3. Fill in the necessary environment variables in the .env file. You'll need to provide values for the following variables:
 ```env
-DISCORD_BOT_TOKENDISCORD_CHANNEL_ID=
-DISCORD_WEBHOOK_ID=
-DISCORD_WEBHOOK_TOKEN=
-DISCORD_FALLBACK_AVATAR_URL=
-# We support only 1 WhatsApp chat for now, you'll have to get its ID manually (instructions TBA).
-WA_GOUAE_JID=
+DISCORD_BOT_TOKEN=
 ```
 
 4. Install the dependencies
