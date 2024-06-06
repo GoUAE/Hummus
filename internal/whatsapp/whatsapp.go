@@ -58,8 +58,6 @@ func (bot *Bot) EventHandler() func(interface{}) {
 }
 
 func (bot *Bot) Bridge(chat string, ch chan *events.Message) (err error) {
-	bot.session.Store.Contacts.GetAllContacts()
-
 	// For now, let's solely support getting JID from groups
 	groups, err := bot.session.GetJoinedGroups()
 	if err != nil {

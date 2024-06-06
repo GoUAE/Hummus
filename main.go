@@ -40,14 +40,12 @@ func main() {
 	ch, err := dc.Channel("1248051374969851954")
 
 	if err != nil {
-		// wa.Stop()
-		dc.Stop()
+		BatchStop(&wa, &dc)
 		dc.Log.Fatal("Failed to get the discord channel, ", err)
 	}
 
 	if err = wa.Bridge("GoUAE Community", ch); err != nil {
-		wa.Stop()
-		dc.Stop()
+		BatchStop(&wa, &dc)
 		wa.Log.Fatal("Failed to bridge the whatsapp bot, ", err)
 	}
 
@@ -55,8 +53,12 @@ func main() {
 
 	log.Println("Shutting down the bot...")
 
-	// wa.Stop()
-	dc.Stop()
+	BatchStop(&wa, &dc)
 
 	log.Println("Bot stopped gracefully.")
+}
+
+func BatchStop(wa *whatsapp.Bot, dc *discord.Bot) {
+	wa.Stop()
+	dc.Stop()
 }

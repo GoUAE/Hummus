@@ -4,7 +4,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/bwmarrin/discordgo"
 	dg "github.com/bwmarrin/discordgo"
 	"go.mau.fi/whatsmeow/types/events"
 )
@@ -63,7 +62,7 @@ func (bot *Bot) Pipe(webHook *dg.Webhook, ch chan *events.Message) {
 			webHook.ID,
 			webHook.Token,
 			true,
-			&discordgo.WebhookParams{ /* TODO */ },
+			&dg.WebhookParams{ /* TODO */ },
 		)
 
 		if err != nil {
