@@ -14,7 +14,7 @@
       }: {
         devShells.default = pkgs.mkShell {
           packages = l.attrValues {
-            inherit (pkgs) go gopls just imagemagick pkg-config;
+            inherit (pkgs) go gopls just imagemagick pkg-config golangci-lint;
           };
         };
       };

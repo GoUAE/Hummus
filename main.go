@@ -8,61 +8,55 @@ import (
 
 	"github.com/gouae/hummus/internal/config"
 	"github.com/gouae/hummus/internal/discord"
-	"github.com/gouae/hummus/internal/utils"
 	"github.com/gouae/hummus/internal/whatsapp"
-
-	// autoload loads all the environment variables from the .env file
-	_ "github.com/joho/godotenv/autoload"
 )
 
 func main() {
-	cfg, err := config.LoadFromEnv()
+	cfg, err := config.LoadEnv()
 	if err != nil {
-		utils.LogError(err, "Failed to load config from environment")
-		return
+		log.Fatal("Failed to load config from environment, ", err)
 	}
 
-	discordBot, err := discord.New(cfg)
+	dc := discord.New(cfg.DiscordToken)
+
+	wa, err := whatsapp.New()
 	if err != nil {
-		utils.LogError(err, "Failed to start the discord bot")
-		return
+		wa.Log.Fatal("Failed to initialize the whatsapp bot, ", err)
 	}
 
 	// Signal handling to gracefully shutdown the bot
 	stop := make(chan os.Signal, 1)
-
-	// channel to listen for SIGINT and SIGTERM events (CTRL-C etc.)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 
-	err = discordBot.Run()
-	if err != nil {
-		return
+	if err = dc.Run(); err != nil {
+		dc.Log.Fatal("Failed to start the discord bot, ", err)
 	}
 
-	waBot, err := whatsapp.New(cfg, discordBot)
-	if err != nil {
-		utils.LogError(err, "Failed to initialize the whatsapp bot")
-		utils.LogError(discordBot.Stop(), "Error stopping discord bot")
-		return
+	if err = wa.Run(); err != nil {
+		dc.Stop()
+		wa.Log.Fatal("Failed to start the whatsapp bot, ", err)
 	}
 
-	err = waBot.Run()
+	ch, err := dc.Channel("1248051374969851954")
+
 	if err != nil {
-		utils.LogError(err, "Failed to start the whatsapp bridge")
-		utils.LogError(discordBot.Stop(), "Error stopping discord bot")
-		return
+		// wa.Stop()
+		dc.Stop()
+		dc.Log.Fatal("Failed to get the discord channel, ", err)
+	}
+
+	if err = wa.Bridge("GoUAE Community", ch); err != nil {
+		wa.Stop()
+		dc.Stop()
+		wa.Log.Fatal("Failed to bridge the whatsapp bot, ", err)
 	}
 
 	<-stop // Wait for a termination signal
 
 	log.Println("Shutting down the bot...")
 
-	waBot.Stop()
-	err = discordBot.Stop()
-	if err != nil {
-		utils.LogError(discordBot.Stop(), "Error stopping discord bot")
-		return
-	}
+	// wa.Stop()
+	dc.Stop()
 
 	log.Println("Bot stopped gracefully.")
 }

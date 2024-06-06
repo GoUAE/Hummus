@@ -2,139 +2,80 @@ package discord
 
 import (
 	"log"
-	"regexp"
-	"strings"
+	"os"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/gouae/hummus/internal/config"
-	"github.com/gouae/hummus/internal/utils"
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/types"
+	dg "github.com/bwmarrin/discordgo"
 	"go.mau.fi/whatsmeow/types/events"
 )
 
 type Bot struct {
-	session           *discordgo.Session
-	discordBotToken   string
-	webhookID         string
-	webhookToken      string
-	fallbackAvatarURL string
+	session *dg.Session
+	token   string
+
+	Log *log.Logger
 }
 
-func New(cfg config.HummusConfig) (discordBot Bot, err error) {
-	discordBot = Bot{
-		discordBotToken:   cfg.DiscordBotToken,
-		webhookID:         cfg.DiscordWebhookID,
-		webhookToken:      cfg.DiscordWebhoolToken,
-		fallbackAvatarURL: cfg.FallbackAvatarURL,
-	}
+func New(token string) Bot {
+	bot := Bot{token: token}
 
-	discordBot.session, err = discordgo.New("Bot " + discordBot.discordBotToken)
-	if err != nil {
-		return
-	}
+	bot.Log = log.New(os.Stdout, "[Discord] ", log.LstdFlags)
 
-	// sets correct itents for the current session
-	discordBot.session.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsMessageContent
+	bot.session, _ = dg.New("Bot " + bot.token)
+	bot.session.Identify.Intents = dg.IntentsGuildMessages | dg.IntentsMessageContent | dg.IntentsGuildWebhooks
 
-	return
+	return bot
 }
 
-func (bot *Bot) Run() (err error) {
-	err = bot.session.Open()
+func (bot *Bot) Channel(channelID string) (chan *events.Message, error) {
+	var webHook *dg.Webhook
+
+	existingHooks, err := bot.session.ChannelWebhooks(channelID)
 	if err != nil {
-		return err
-	}
-	return
-}
-
-func (bot *Bot) Stop() (err error) {
-	err = bot.session.Close()
-	if err != nil {
-		return
-	}
-	return
-}
-
-func (bot *Bot) PipeToDiscord(jid types.JID, client *whatsmeow.Client, v *events.Message) {
-	// fallback profile picture
-	profilePic := bot.fallbackAvatarURL
-
-	userProfilePicInfo, err := client.
-		GetProfilePictureInfo(
-			v.Info.Sender,
-			&whatsmeow.GetProfilePictureParams{},
-		)
-	if err != nil {
-		log.Println(err.Error())
+		return nil, err
 	}
 
-	if userProfilePicInfo != nil {
-		profilePic = userProfilePicInfo.URL
-	}
-
-	files := utils.WhatsappFilesToDiscordFiles(client, v.Message)
-
-	var newMessageContent string
-	var quotedMessageContent string
-
-	// Check if v.Message exists and is not nil
-	if msg := v.Message; msg != nil {
-		newMessageContent = utils.ReplaceJIDsWithPushNames(
-			client,
-			utils.GetJIDs(msg),
-			utils.GetMessageCaption(msg),
-		)
-
-		if etm := msg.ExtendedTextMessage; etm != nil {
-			if etmContext := etm.ContextInfo; etmContext != nil {
-				quotedMessage := etmContext.GetQuotedMessage()
-				if quotedMessage != nil {
-					quotedMessageContent = utils.ReplaceJIDsWithPushNames(
-						client,
-						utils.GetJIDs(quotedMessage),
-						utils.GetMessageCaption(quotedMessage),
-					)
-					lines := strings.Split(quotedMessageContent, "\n")
-
-					// Iterate through each line and add the suffix
-					var processedLines []string
-					for _, line := range lines {
-						processedLine := "> " + line
-						processedLines = append(processedLines, processedLine)
-					}
-
-					// Join the processed lines back with newline separators
-					quotedMessageContent = strings.Join(processedLines, "\n") + "\n\n"
-				}
-			}
+	// Check if we have an existing whatsapp bridge hook
+	for _, hook := range existingHooks {
+		if hook.Name == "Hummus Whatsapp Bridge" {
+			webHook = hook
 		}
-
 	}
 
-	messageContent := quotedMessageContent + newMessageContent
-
-	// Regex pattern with capturing mention
-	regex := regexp.MustCompile(`(?i)@([a-zA-Z0-9]+)`)
-
-	// INFO: Catches all unreplaces phone numbers and redacts them
-	redactedText := regex.ReplaceAllString(messageContent, "`@[REDACTED]`")
-
-	if redactedText == "" && files == nil {
-		return
+	// Otherwise create a new webhook
+	if webHook == nil {
+		webHook, err = bot.session.WebhookCreate(channelID, "Hummus Whatsapp Bridge", "")
+		if err != nil {
+			return nil, err
+		}
 	}
-	_, err = bot.session.WebhookExecute(
-		bot.webhookID,
-		bot.webhookToken,
-		true,
-		&discordgo.WebhookParams{
-			Content:   redactedText,
-			Username:  v.Info.PushName,
-			AvatarURL: profilePic,
-			Files:     files,
-		},
-	)
-	if err != nil {
-		utils.LogError(err, "Failed to execute Discord webhook")
+
+	ch := make(chan *events.Message, 1)
+	go bot.Pipe(webHook, ch)
+
+	return ch, nil
+}
+
+// TODO: Refactor PipeToDiscord to use channels & solve existing edge-cases
+func (bot *Bot) Pipe(webHook *dg.Webhook, ch chan *events.Message) {
+	for v := range ch {
+		_, err := bot.session.WebhookExecute(
+			webHook.ID,
+			webHook.Token,
+			true,
+			&discordgo.WebhookParams{ /* TODO */ },
+		)
+
+		if err != nil {
+			bot.Log.Println("Failed to send message to discord, ", err)
+		}
 	}
+}
+
+func (bot *Bot) Run() error {
+	return bot.session.Open()
+}
+
+func (bot *Bot) Stop() error {
+	return bot.session.Close()
 }
